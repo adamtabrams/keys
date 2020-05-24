@@ -24,11 +24,12 @@ usage() {
 
 gen_password() {
     while true; do
-        secret=$(gpg --gen-random 2 --armor 12)
+        secret=$(gpg --armor --gen-random 2 12)
         [ "$(echo "$secret" | tr -cd "[:lower:]" | wc -c)" -lt 1 ] && continue
         [ "$(echo "$secret" | tr -cd "[:upper:]" | wc -c)" -lt 1 ] && continue
         [ "$(echo "$secret" | tr -cd "[:digit:]" | wc -c)" -lt 1 ] && continue
         [ "$(echo "$secret" | tr -cd "[:punct:]" | wc -c)" -lt 1 ] && continue
+        break
     done
     echo "$secret"
 }
@@ -64,15 +65,16 @@ select_key() {
         sum_len=$(( line_len + disp_len ))
 
         [ "$term_width" -lt $sum_len ] && echo "" && line_len=0
-        printf "%${max_i_len}s) %-${max_key_len}s  " "$i" "$key"
+        printf "%${max_i_len}s) %-${max_key_len}s  " "$i" "$key" >&2
 
         line_len=$(( line_len + disp_len ))
         i=$(( i + 1 ))
     done
 
-    printf "\n\nenter the number of a key: "
+    printf "\n\nenter the number of a key: " >&2
     read -r key_num
 
+    [ ! "$key_num" ] && echo "invalid entry" >&2 && exit 1
     [ "$(echo "$key_num" | tr -d "[:digit:]")" ] && echo "invalid number" >&2 && exit 1
     [ "$key_num" -lt 1 ] && echo "invalid number" >&2 && exit 1
     [ "$key_num" -ge $i ] && echo "invalid number" >&2 && exit 1
@@ -90,6 +92,13 @@ add_key() {
     echo "leave empty generate a password"
     printf "password: "
     read -rs password
+
+    echo ""
+    [ "$password" ] &&
+        echo "confirm password" &&
+        printf "password: " &&
+        read -rs pass_conf
+    [ "$password" != "$pass_conf" ] && echo "passwords did not match" >&2 && exit 1
 
     [ ! "$password" ] && password="$(gen_password)"
 
@@ -122,7 +131,7 @@ update_key() {
             gpg --encrypt --armor --default-recipient-self > "$vault/$sel_key"
 
         echo "$new_pass" | $clipboard
-        printf "\nnew password was copied to the clipboard\n"
+        printf "\nnew password was set and copied to the clipboard\n"
     fi
 
     if [[ $update_sel = [uU] ]]; then
