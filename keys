@@ -1,0 +1,93 @@
+#!/bin/sh
+
+usage() {
+    echo "usage: $0 [COMMAND] [ARGS]"
+    echo ""
+    echo "commands:"
+    echo "    add NAME"
+    echo "        store a new key and name it NAME"
+    echo ""
+    echo "    change NAME"
+    echo "        update the username or password of key"
+    echo ""
+    echo "    remove"
+    echo "        lets you select a key to delete"
+    echo ""
+    echo "    rm"
+    echo "        alias for remove"
+}
+
+add_key() { true; }
+change_key() { true; }
+remove_key() { true; }
+
+[ "$1" = "add"    ] && add_key    && exit 0
+[ "$1" = "change" ] && change_key && exit 0
+[ "$1" = "remove" ] && remove_key && exit 0
+[ "$1" = "rm"     ] && remove_key && exit 0
+[ "$1" = "-h"     ] && usage      && exit 0
+[ "$1" = "--help" ] && usage      && exit 0
+[ "$1"            ] && usage 2>&1 && exit 1
+
+xdg_data_home=${XDG_DATA_HOME:-$HOME/.local/share}
+vault="$xdg_data_home/keys/vault"
+
+[ ! -d "$vault" ] && mkdir -p "$vault"
+
+keys=$(find "$vault" -mindepth 1 -exec basename {} \;)
+
+IFS="
+"
+
+max_key_len=$(mktemp)
+echo 0 > "$max_key_len"
+max_i_len=$(mktemp)
+echo 0 > "$max_i_len"
+i=1
+
+for key in $keys; do
+    [ "$(cat "$max_key_len")" -lt ${#key} ] && echo ${#key} > "$max_key_len"
+    [ "$(cat "$max_i_len")" -lt ${#i} ] && echo ${#i} > "$max_i_len"
+    i=$(( i + 1 ))
+done
+
+max_key=$(cat "$max_key_len")
+max_i=$(cat "$max_i_len")
+rm "$max_key_len" "$max_i_len"
+
+term_width=$(tput cols)
+line_len=$(mktemp)
+echo 0 > "$line_len"
+i=1
+
+for key in $keys; do
+    disp_len=$(( max_key + max_i + 4 ))
+    sum_len=$(( $(cat "$line_len") + disp_len ))
+
+    [ "$term_width" -lt $sum_len ] && echo "" && echo 0 > "$line_len"
+    printf "%${max_i}s) %-${max_key}s  " "$i" "$key"
+
+    echo $(( $(cat "$line_len") + disp_len )) > "$line_len"
+    i=$(( i + 1 ))
+done
+
+rm "$line_len"
+
+printf "\n\nenter the number of a key: "
+read -r key_num
+
+[ "$(echo "$key_num" | tr -d "[:digit:]")" ] && echo "invalid number" >&2 && exit 1
+[ "$key_num" -lt 1 ] && echo "invalid number" >&2 && exit 1
+[ "$key_num" -ge $i ] && echo "invalid number" >&2 && exit 1
+
+sel_key=$(echo "$keys" | sed "${key_num}q;d")
+echo "$sel_key"
+
+# prompt for password?
+# read with gpg
+
+# copy password
+# sed -n "s|^password: \(.*$\)|\1|p" vault/test
+
+# print username
+# sed -n "s|^username: \(.*$\)|\1|p" vault/test
