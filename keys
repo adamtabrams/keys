@@ -37,7 +37,6 @@ gen_password() {
 set_clipboard() {
     [[ $OSTYPE = darwin* ]] && echo "pbcopy" && return
     [[ $OSTYPE = linux-gnu* ]] && echo "xclip -sel clip" && return
-    echo "couldn't detect clipboard" >&2 && exit 1
 }
 
 select_key() {
@@ -74,10 +73,10 @@ select_key() {
     printf "\n\nenter the number of a key: " >&2
     read -r key_num
 
-    [ ! "$key_num" ] && echo "invalid entry" >&2 && exit 1
-    [ "$(echo "$key_num" | tr -d "[:digit:]")" ] && echo "invalid number" >&2 && exit 1
-    [ "$key_num" -lt 1 ] && echo "invalid number" >&2 && exit 1
-    [ "$key_num" -ge $i ] && echo "invalid number" >&2 && exit 1
+    [ ! "$key_num" ] && return 1
+    [ "$(echo "$key_num" | tr -d "[:digit:]")" ] && return 1
+    [ "$key_num" -lt 1 ] && return 1
+    [ "$key_num" -ge $i ] && return 1
 
     echo "$keys" | sed "${key_num}q;d"
 }
@@ -167,9 +166,12 @@ remove_key() {
 [ "$1"            ] && usage >&2    && exit 1
 
 clipboard=$(set_clipboard)
-sel_key=$(select_key)
-key_text=$(gpg --decrypt "$vault/$sel_key" 2> /dev/null)
+[ ! "$clipboard" ] && echo "couldn't detect clipboard" >&2 && exit 1
 
+sel_key=$(select_key)
+[ ! "$sel_key" ] && echo "invalid entry" >&2 && exit 1
+
+key_text=$(gpg --decrypt "$vault/$sel_key" 2> /dev/null)
 [ ! "$key_text" ] && echo "decrypt failed" >&2 && exit 1
 
 echo "$key_text" | sed -n "s|^password: \(.*$\)|\1|p" | $clipboard
