@@ -16,6 +16,7 @@ Create a GPG key.
     * key kind: RSA and RSA
     * key size: 4096
     * valid for: 1y
+* You can learn more about GPG [here](https://www.digitalocean.com/community/tutorials/how-to-use-gpg-to-encrypt-and-sign-messages).
 
 Clone this repo.
 * `git clone https://github.com/adamtabrams/keys.git`
