@@ -73,7 +73,7 @@ add_key() {
     printf "username: %s\npassword: %s\n" "$username" "$password" |
         gpg --encrypt --armor --default-recipient-self > "$vault/$2"
 
-    echo "done"
+    printf "\ndone"
 }
 
 update_key() {
@@ -95,7 +95,7 @@ update_key() {
         echo "$key_text" | sed "s|^\(password: \).*|\1$new_pass|" |
             gpg --encrypt --armor --default-recipient-self > "$vault/$sel_key"
 
-        printf "%s" "$new_pass" | $clipboard
+        echo "$new_pass" | tr -d "\n" | $clipboard
         printf "\nnew password was set and copied to the clipboard\n"
     fi
 
@@ -142,7 +142,8 @@ sel_key=$(select_key)
 key_text=$(gpg --decrypt "$vault/$sel_key" 2> /dev/null)
 [ ! "$key_text" ] && echo "decrypt failed" >&2 && exit 1
 
-printf "%s" "$key_text" | sed -n "s|^password: \(.*\)$|\1|p" | $clipboard
+echo "$key_text" | sed -n "s|^password: \(.*\)$|\1|p" |
+    tr -d "\n" | $clipboard
 echo "password was copied to the clipboard"
 
 echo "$key_text" | grep --color=never "^username: "
