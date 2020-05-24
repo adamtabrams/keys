@@ -1,4 +1,9 @@
-#!/bin/sh
+#!/bin/bash
+
+xdg_data_home=${XDG_DATA_HOME:-$HOME/.local/share}
+vault="$xdg_data_home/keys/vault"
+
+[ ! -d "$vault" ] && mkdir -p "$vault"
 
 usage() {
     echo "usage: $0 [COMMAND] [ARGS]"
@@ -7,8 +12,8 @@ usage() {
     echo "    add NAME"
     echo "        store a new key and name it NAME"
     echo ""
-    echo "    change NAME"
-    echo "        update the username or password of key"
+    echo "    update"
+    echo "        change the username or password of a key"
     echo ""
     echo "    remove"
     echo "        lets you select a key to delete"
@@ -17,77 +22,148 @@ usage() {
     echo "        alias for remove"
 }
 
-add_key() { true; }
-change_key() { true; }
-remove_key() { true; }
+gen_password() {
+    while true; do
+        secret=$(gpg --gen-random 2 --armor 12)
+        [ "$(echo "$secret" | tr -cd "[:lower:]" | wc -c)" -lt 1 ] && continue
+        [ "$(echo "$secret" | tr -cd "[:upper:]" | wc -c)" -lt 1 ] && continue
+        [ "$(echo "$secret" | tr -cd "[:digit:]" | wc -c)" -lt 1 ] && continue
+        [ "$(echo "$secret" | tr -cd "[:punct:]" | wc -c)" -lt 1 ] && continue
+    done
+    echo "$secret"
+}
 
-[ "$1" = "add"    ] && add_key    && exit 0
-[ "$1" = "change" ] && change_key && exit 0
-[ "$1" = "remove" ] && remove_key && exit 0
-[ "$1" = "rm"     ] && remove_key && exit 0
-[ "$1" = "-h"     ] && usage      && exit 0
-[ "$1" = "--help" ] && usage      && exit 0
-[ "$1"            ] && usage 2>&1 && exit 1
+set_clipboard() {
+    [[ $OSTYPE = darwin* ]] && echo "pbcopy" && return
+    [[ $OSTYPE = linux-gnu* ]] && echo "xclip -sel clip" && return
+    echo "couldn't detect clipboard" >&2 && exit 1
+}
 
-xdg_data_home=${XDG_DATA_HOME:-$HOME/.local/share}
-vault="$xdg_data_home/keys/vault"
+select_key() {
+    keys=$(find "$vault" -mindepth 1 -exec basename {} \;)
 
-[ ! -d "$vault" ] && mkdir -p "$vault"
+    IFS="
+    "
 
-keys=$(find "$vault" -mindepth 1 -exec basename {} \;)
+    max_key_len=0
+    max_i_len=0
+    i=1
 
-IFS="
-"
+    for key in $keys; do
+        [ "$max_key_len" -lt ${#key} ] && max_key_len=${#key}
+        [ "$max_i_len" -lt ${#i} ] && max_i_len=${#i}
+        i=$(( i + 1 ))
+    done
 
-max_key_len=$(mktemp)
-echo 0 > "$max_key_len"
-max_i_len=$(mktemp)
-echo 0 > "$max_i_len"
-i=1
+    term_width=$(tput cols)
+    line_len=0
+    i=1
 
-for key in $keys; do
-    [ "$(cat "$max_key_len")" -lt ${#key} ] && echo ${#key} > "$max_key_len"
-    [ "$(cat "$max_i_len")" -lt ${#i} ] && echo ${#i} > "$max_i_len"
-    i=$(( i + 1 ))
-done
+    for key in $keys; do
+        disp_len=$(( max_key_len + max_i_len + 4 ))
+        sum_len=$(( line_len + disp_len ))
 
-max_key=$(cat "$max_key_len")
-max_i=$(cat "$max_i_len")
-rm "$max_key_len" "$max_i_len"
+        [ "$term_width" -lt $sum_len ] && echo "" && line_len=0
+        printf "%${max_i_len}s) %-${max_key_len}s  " "$i" "$key"
 
-term_width=$(tput cols)
-line_len=$(mktemp)
-echo 0 > "$line_len"
-i=1
+        line_len=$(( line_len + disp_len ))
+        i=$(( i + 1 ))
+    done
 
-for key in $keys; do
-    disp_len=$(( max_key + max_i + 4 ))
-    sum_len=$(( $(cat "$line_len") + disp_len ))
+    printf "\n\nenter the number of a key: "
+    read -r key_num
 
-    [ "$term_width" -lt $sum_len ] && echo "" && echo 0 > "$line_len"
-    printf "%${max_i}s) %-${max_key}s  " "$i" "$key"
+    [ "$(echo "$key_num" | tr -d "[:digit:]")" ] && echo "invalid number" >&2 && exit 1
+    [ "$key_num" -lt 1 ] && echo "invalid number" >&2 && exit 1
+    [ "$key_num" -ge $i ] && echo "invalid number" >&2 && exit 1
 
-    echo $(( $(cat "$line_len") + disp_len )) > "$line_len"
-    i=$(( i + 1 ))
-done
+    echo "$keys" | sed "${key_num}q;d"
+}
 
-rm "$line_len"
+add_key() {
+    [ ! "$2" ] && usage >&2 && exit 1
+    [ -e "$vault/$2" ] && echo "a key with that name already exists" >&2 && exit 1
 
-printf "\n\nenter the number of a key: "
-read -r key_num
+    printf "username: "
+    read -r username
 
-[ "$(echo "$key_num" | tr -d "[:digit:]")" ] && echo "invalid number" >&2 && exit 1
-[ "$key_num" -lt 1 ] && echo "invalid number" >&2 && exit 1
-[ "$key_num" -ge $i ] && echo "invalid number" >&2 && exit 1
+    echo "leave empty generate a password"
+    printf "password: "
+    read -rs password
 
-sel_key=$(echo "$keys" | sed "${key_num}q;d")
-echo "$sel_key"
+    [ ! "$password" ] && password="$(gen_password)"
 
-# prompt for password?
-# read with gpg
+    printf "username: %s\npassword: %s\n" "$username" "$password" |
+        gpg --encrypt --armor --default-recipient-self > "$vault/$2"
 
-# copy password
-# sed -n "s|^password: \(.*$\)|\1|p" vault/test
+    echo "done"
+}
 
-# print username
-# sed -n "s|^username: \(.*$\)|\1|p" vault/test
+update_key() {
+    sel_key=$(select_key)
+
+    key_text=$(gpg --decrypt "$vault/$sel_key" 2> /dev/null)
+
+    echo "Change (u)sername or (p)assword?"
+    read -r update_sel
+
+    [[ $update_sel != [uUpP] ]] && echo "invalid selection" >&2 && exit 1
+
+    if [[ $update_sel = [pP] ]]; then
+        clipboard=$(set_clipboard)
+
+        echo "enter your new password (empty generates a new one)"
+        printf "password: "
+        read -rs new_pass
+
+        [ ! "$new_pass" ] && new_pass=$(gen_password)
+
+        echo "$key_text" | sed "s|^\(password: \).*|\1$new_pass|" |
+            gpg --encrypt --armor --default-recipient-self > "$vault/$sel_key"
+
+        echo "$new_pass" | $clipboard
+        printf "\nnew password was copied to the clipboard\n"
+    fi
+
+    if [[ $update_sel = [uU] ]]; then
+
+        echo "enter your new username"
+        printf "username: "
+        read -r new_user
+
+        echo "$key_text" | sed "s|^\(username: \).*|\1$new_user|" |
+            gpg --encrypt --armor --default-recipient-self > "$vault/$sel_key"
+    fi
+
+    echo "done"
+}
+
+remove_key() {
+    sel_key=$(select_key)
+
+    echo "are you sure you want to remove this key (y/N): "
+    read -r confirm_del
+
+    [[ $confirm_del = [yY] ]] && rm "$vault/$sel_key"
+
+    echo "done"
+}
+
+[ "$1" = "add"    ] && add_key "$@" && exit 0
+[ "$1" = "update" ] && update_key   && exit 0
+[ "$1" = "remove" ] && remove_key   && exit 0
+[ "$1" = "rm"     ] && remove_key   && exit 0
+[ "$1" = "-h"     ] && usage        && exit 0
+[ "$1" = "--help" ] && usage        && exit 0
+[ "$1"            ] && usage >&2    && exit 1
+
+clipboard=$(set_clipboard)
+sel_key=$(select_key)
+key_text=$(gpg --decrypt "$vault/$sel_key" 2> /dev/null)
+
+[ ! "$key_text" ] && echo "decrypt failed" >&2 && exit 1
+
+echo "$key_text" | sed -n "s|^password: \(.*$\)|\1|p" | $clipboard
+printf "\npassword was copied to the clipboard\n"
+
+echo "$key_text" | grep --color=never "^username: "
