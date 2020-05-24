@@ -24,7 +24,7 @@ usage() {
 
 gen_password() {
     while true; do
-        secret=$(gpg --armor --gen-random 2 12)
+        secret=$(gpg --armor --gen-random 2 14)
         [ "$(echo "$secret" | tr -cd "[:lower:]" | wc -c)" -lt 1 ] && continue
         [ "$(echo "$secret" | tr -cd "[:upper:]" | wc -c)" -lt 1 ] && continue
         [ "$(echo "$secret" | tr -cd "[:digit:]" | wc -c)" -lt 1 ] && continue
@@ -40,65 +40,35 @@ set_clipboard() {
 }
 
 select_key() {
-    keys=$(find "$vault" -mindepth 1 -exec basename {} \;)
-    IFS=$'\n'
+    find "$vault" -mindepth 1 -exec basename {} \; | fzf +m --reverse
+}
 
-    max_key_len=0
-    max_i_len=0
-    i=1
+get_password() {
+    echo "enter a password (empty will generate one)" >&2
+    printf "password: " >&2
+    read -rs password
 
-    for key in $keys; do
-        [ "$max_key_len" -lt ${#key} ] && max_key_len=${#key}
-        [ "$max_i_len" -lt ${#i} ] && max_i_len=${#i}
-        i=$(( i + 1 ))
-    done
+    [ "$password" ] &&
+        printf "\nconfirm password\n" >&2 &&
+        printf "password: " >&2 &&
+        read -rs pass_conf
 
-    term_width=$(tput cols)
-    line_len=0
-    i=1
+    [ "$password" != "$pass_conf" ] && echo "passwords did not match" >&2 && return
 
-    for key in $keys; do
-        disp_len=$(( max_key_len + max_i_len + 4 ))
-        sum_len=$(( line_len + disp_len ))
+    [ ! "$password" ] && password="$(gen_password)"
 
-        [ "$term_width" -lt $sum_len ] && echo "" && line_len=0
-        printf "%${max_i_len}s) %-${max_key_len}s  " "$i" "$key" >&2
-
-        line_len=$(( line_len + disp_len ))
-        i=$(( i + 1 ))
-    done
-
-    printf "\n\nenter the number of a key: " >&2
-    read -r key_num
-
-    [ ! "$key_num" ] && return 1
-    [ "$(echo "$key_num" | tr -d "[:digit:]")" ] && return 1
-    [ "$key_num" -lt 1 ] && return 1
-    [ "$key_num" -ge $i ] && return 1
-
-    echo "$keys" | sed "${key_num}q;d"
+    echo "$password"
 }
 
 add_key() {
-    [ ! "$2" ] && usage >&2 && exit 1
-    [ -e "$vault/$2" ] && echo "a key with that name already exists" >&2 && exit 1
+    [ ! "$2" ] && usage >&2 && return
+    [ -e "$vault/$2" ] && echo "a key with that name already exists" >&2 && return
 
     printf "username: "
     read -r username
 
-    echo "leave empty generate a password"
-    printf "password: "
-    read -rs password
-    echo ""
-
-    [ "$password" ] &&
-        echo "confirm password" &&
-        printf "password: " &&
-        read -rs pass_conf
-        echo ""
-    [ "$password" != "$pass_conf" ] && echo "passwords did not match" >&2 && exit 1
-
-    [ ! "$password" ] && password="$(gen_password)"
+    password=$(get_password)
+    [ ! "$password" ] && return
 
     printf "username: %s\npassword: %s\n" "$username" "$password" |
         gpg --encrypt --armor --default-recipient-self > "$vault/$2"
@@ -114,27 +84,23 @@ update_key() {
     echo "Change (u)sername or (p)assword?"
     read -r update_sel
 
-    [[ $update_sel != [uUpP] ]] && echo "invalid selection" >&2 && exit 1
+    [[ $update_sel != [uUpP] ]] && echo "invalid selection" >&2 && return
 
     if [[ $update_sel = [pP] ]]; then
         clipboard=$(set_clipboard)
 
-        echo "enter your new password (empty generates a new one)"
-        printf "password: "
-        read -rs new_pass
-
-        [ ! "$new_pass" ] && new_pass=$(gen_password)
+        new_pass=$(get_password)
+        [ ! "$new_pass" ] && return
 
         echo "$key_text" | sed "s|^\(password: \).*|\1$new_pass|" |
             gpg --encrypt --armor --default-recipient-self > "$vault/$sel_key"
 
-        echo "$new_pass" | $clipboard
+        printf "%s" "$new_pass" | $clipboard
         printf "\nnew password was set and copied to the clipboard\n"
     fi
 
     if [[ $update_sel = [uU] ]]; then
-
-        echo "enter your new username"
+        echo "enter the new username"
         printf "username: "
         read -r new_user
 
@@ -148,11 +114,14 @@ update_key() {
 remove_key() {
     sel_key=$(select_key)
 
+    ! gpg --decrypt "$vault/$sel_key" > /dev/null 2>&1 &&
+        echo "authentication failed" >&2 &&
+        return
+
     echo "are you sure you want to remove this key (y/N): "
     read -r confirm_del
 
     [[ $confirm_del = [yY] ]] && rm "$vault/$sel_key"
-
     echo "done"
 }
 
@@ -173,7 +142,7 @@ sel_key=$(select_key)
 key_text=$(gpg --decrypt "$vault/$sel_key" 2> /dev/null)
 [ ! "$key_text" ] && echo "decrypt failed" >&2 && exit 1
 
-echo "$key_text" | sed -n "s|^password: \(.*$\)|\1|p" | $clipboard
+printf "%s" "$key_text" | sed -n "s|^password: \(.*\)$|\1|p" | $clipboard
 printf "\npassword was copied to the clipboard\n"
 
 echo "$key_text" | grep --color=never "^username: "
