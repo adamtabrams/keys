@@ -6,8 +6,8 @@ for GPG, making it easy to store and access passwords.
 
 # Setup
 
-Install GPG.
-* For MacOS: `brew install gpg`
+Install GPG and fzf.
+* For MacOS: `brew install gpg fzf`
 
 Create a GPG key.
 * `gpg --full-generate-key`

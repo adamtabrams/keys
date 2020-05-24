@@ -143,6 +143,6 @@ key_text=$(gpg --decrypt "$vault/$sel_key" 2> /dev/null)
 [ ! "$key_text" ] && echo "decrypt failed" >&2 && exit 1
 
 printf "%s" "$key_text" | sed -n "s|^password: \(.*\)$|\1|p" | $clipboard
-printf "\npassword was copied to the clipboard\n"
+echo "password was copied to the clipboard"
 
 echo "$key_text" | grep --color=never "^username: "
