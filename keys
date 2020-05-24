@@ -41,9 +41,7 @@ set_clipboard() {
 
 select_key() {
     keys=$(find "$vault" -mindepth 1 -exec basename {} \;)
-
-    IFS="
-    "
+    IFS=$'\n'
 
     max_key_len=0
     max_i_len=0
@@ -91,12 +89,13 @@ add_key() {
     echo "leave empty generate a password"
     printf "password: "
     read -rs password
-
     echo ""
+
     [ "$password" ] &&
         echo "confirm password" &&
         printf "password: " &&
         read -rs pass_conf
+        echo ""
     [ "$password" != "$pass_conf" ] && echo "passwords did not match" >&2 && exit 1
 
     [ ! "$password" ] && password="$(gen_password)"
