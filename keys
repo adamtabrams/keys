@@ -1,0 +1,149 @@
+#!/bin/bash
+
+xdg_data_home=${XDG_DATA_HOME:-$HOME/.local/share}
+vault="$xdg_data_home/keys/vault"
+
+[ ! -d "$vault" ] && mkdir -p "$vault"
+
+usage() {
+    echo "usage: keys [COMMAND] [ARGS]"
+    echo ""
+    echo "commands:"
+    echo "    add NAME"
+    echo "        store a new key and name it NAME"
+    echo ""
+    echo "    update"
+    echo "        change the username or password of a key"
+    echo ""
+    echo "    remove"
+    echo "        lets you select a key to delete"
+    echo ""
+    echo "    rm"
+    echo "        alias for remove"
+}
+
+gen_password() {
+    while true; do
+        secret=$(gpg --armor --gen-random 2 14)
+        [ "$(echo "$secret" | tr -cd "[:lower:]" | wc -c)" -lt 1 ] && continue
+        [ "$(echo "$secret" | tr -cd "[:upper:]" | wc -c)" -lt 1 ] && continue
+        [ "$(echo "$secret" | tr -cd "[:digit:]" | wc -c)" -lt 1 ] && continue
+        [ "$(echo "$secret" | tr -cd "[:punct:]" | wc -c)" -lt 1 ] && continue
+        break
+    done
+    echo "$secret"
+}
+
+set_clipboard() {
+    [[ $OSTYPE = darwin* ]] && echo "pbcopy" && return
+    [[ $OSTYPE = linux-gnu* ]] && echo "xclip -sel clip" && return
+}
+
+select_key() {
+    find "$vault" -mindepth 1 -exec basename {} \; | fzf +m --reverse
+}
+
+get_password() {
+    echo "enter a password (empty will generate one)" >&2
+    printf "password: " >&2
+    read -rs password
+
+    [ "$password" ] &&
+        printf "\nconfirm password\n" >&2 &&
+        printf "password: " >&2 &&
+        read -rs pass_conf
+
+    [ "$password" != "$pass_conf" ] && echo "passwords did not match" >&2 && return
+
+    [ ! "$password" ] && password="$(gen_password)"
+
+    echo "$password"
+}
+
+add_key() {
+    [ ! "$2" ] && usage >&2 && return
+    [ -e "$vault/$2" ] && echo "a key with that name already exists" >&2 && return
+
+    printf "username: "
+    read -r username
+
+    password=$(get_password)
+    [ ! "$password" ] && return
+
+    printf "username: %s\npassword: %s\n" "$username" "$password" |
+        gpg --encrypt --armor --default-recipient-self > "$vault/$2"
+
+    printf "\ndone"
+}
+
+update_key() {
+    sel_key=$(select_key)
+
+    key_text=$(gpg --decrypt "$vault/$sel_key" 2> /dev/null)
+
+    echo "Change (u)sername or (p)assword?"
+    read -r update_sel
+
+    [[ $update_sel != [uUpP] ]] && echo "invalid selection" >&2 && return
+
+    if [[ $update_sel = [pP] ]]; then
+        clipboard=$(set_clipboard)
+
+        new_pass=$(get_password)
+        [ ! "$new_pass" ] && return
+
+        echo "$key_text" | sed "s|^\(password: \).*|\1$new_pass|" |
+            gpg --encrypt --armor --default-recipient-self > "$vault/$sel_key"
+
+        echo "$new_pass" | tr -d "\n" | $clipboard
+        printf "\nnew password was set and copied to the clipboard\n"
+    fi
+
+    if [[ $update_sel = [uU] ]]; then
+        echo "enter the new username"
+        printf "username: "
+        read -r new_user
+
+        echo "$key_text" | sed "s|^\(username: \).*|\1$new_user|" |
+            gpg --encrypt --armor --default-recipient-self > "$vault/$sel_key"
+    fi
+
+    echo "done"
+}
+
+remove_key() {
+    sel_key=$(select_key)
+
+    ! gpg --decrypt "$vault/$sel_key" > /dev/null 2>&1 &&
+        echo "authentication failed" >&2 &&
+        return
+
+    echo "are you sure you want to remove this key (y/N): "
+    read -r confirm_del
+
+    [[ $confirm_del = [yY] ]] && rm "$vault/$sel_key"
+    echo "done"
+}
+
+[ "$1" = "add"    ] && add_key "$@" && exit 0
+[ "$1" = "update" ] && update_key   && exit 0
+[ "$1" = "remove" ] && remove_key   && exit 0
+[ "$1" = "rm"     ] && remove_key   && exit 0
+[ "$1" = "-h"     ] && usage        && exit 0
+[ "$1" = "--help" ] && usage        && exit 0
+[ "$1"            ] && usage >&2    && exit 1
+
+clipboard=$(set_clipboard)
+[ ! "$clipboard" ] && echo "couldn't detect clipboard" >&2 && exit 1
+
+sel_key=$(select_key)
+[ ! "$sel_key" ] && echo "invalid entry" >&2 && exit 1
+
+key_text=$(gpg --decrypt "$vault/$sel_key" 2> /dev/null)
+[ ! "$key_text" ] && echo "decrypt failed" >&2 && exit 1
+
+echo "$key_text" | sed -n "s|^password: \(.*\)$|\1|p" |
+    tr -d "\n" | $clipboard
+echo "password was copied to the clipboard"
+
+echo "$key_text" | grep --color=never "^username: "
