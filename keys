@@ -6,7 +6,7 @@ vault="$xdg_data_home/keys/vault"
 [ ! -d "$vault" ] && mkdir -p "$vault"
 
 usage() {
-    echo "usage: $0 [COMMAND] [ARGS]"
+    echo "usage: keys [COMMAND] [ARGS]"
     echo ""
     echo "commands:"
     echo "    add NAME"
