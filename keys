@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 xdg_data_home=${XDG_DATA_HOME:-$HOME/.local/share}
 vault="$xdg_data_home/keys/vault"
@@ -35,8 +35,8 @@ gen_password() {
 }
 
 set_clipboard() {
-    [[ $OSTYPE = darwin* ]] && echo "pbcopy" && return
-    [[ $OSTYPE = linux-gnu* ]] && echo "xclip -sel clip" && return
+    [ "$(uname)" = Darwin ] && echo "pbcopy" && return
+    [ "$(uname)" = Linux ] && echo "xclip -sel clip" && return
 }
 
 select_key() {
@@ -46,13 +46,15 @@ select_key() {
 get_password() {
     echo "enter a password (empty will generate one)" >&2
     printf "password: " >&2
-    read -rs password
+    stty -echo
+    read -r password
 
     [ "$password" ] &&
         printf "\nconfirm password\n" >&2 &&
         printf "password: " >&2 &&
-        read -rs pass_conf
+        read -r pass_conf
 
+    stty echo
     [ "$password" != "$pass_conf" ] && echo "passwords did not match" >&2 && return
 
     [ ! "$password" ] && password="$(gen_password)"
@@ -73,7 +75,7 @@ add_key() {
     printf "username: %s\npassword: %s\n" "$username" "$password" |
         gpg --encrypt --armor --default-recipient-self > "$vault/$2"
 
-    printf "\ndone"
+    printf "\ndone\n"
 }
 
 update_key() {
@@ -84,9 +86,9 @@ update_key() {
     echo "Change (u)sername or (p)assword?"
     read -r update_sel
 
-    [[ $update_sel != [uUpP] ]] && echo "invalid selection" >&2 && return
+    [ "$(expr "$update_sel" : "[uUpP]")" = 0 ] && echo "invalid selection" >&2 && return
 
-    if [[ $update_sel = [pP] ]]; then
+    if [ "$(expr "$update_sel" : "[pP]")" = 1 ]; then
         clipboard=$(set_clipboard)
 
         new_pass=$(get_password)
@@ -99,7 +101,7 @@ update_key() {
         printf "\nnew password was set and copied to the clipboard\n"
     fi
 
-    if [[ $update_sel = [uU] ]]; then
+    if [ "$(expr "$update_sel" : "[uU]")" = 1 ]; then
         echo "enter the new username"
         printf "username: "
         read -r new_user
@@ -121,7 +123,7 @@ remove_key() {
     echo "are you sure you want to remove this key (y/N): "
     read -r confirm_del
 
-    [[ $confirm_del = [yY] ]] && rm "$vault/$sel_key"
+    [ "$(expr "$confirm_del" : "[yY]")" = 1 ] && rm "$vault/$sel_key"
     echo "done"
 }
 
