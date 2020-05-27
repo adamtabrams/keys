@@ -86,9 +86,10 @@ update_key() {
     echo "Change (u)sername or (p)assword?"
     read -r update_sel
 
-    [ "$(expr "$update_sel" : "[uUpP]")" = 0 ] && echo "invalid selection" >&2 && return
+    [ "$update_sel" != p ] && [ "$update_sel" != u ] &&
+        echo "invalid selection" >&2 && return
 
-    if [ "$(expr "$update_sel" : "[pP]")" = 1 ]; then
+    if [ "$update_sel" = p ]; then
         clipboard=$(set_clipboard)
 
         new_pass=$(get_password)
@@ -101,7 +102,7 @@ update_key() {
         printf "\nnew password was set and copied to the clipboard\n"
     fi
 
-    if [ "$(expr "$update_sel" : "[uU]")" = 1 ]; then
+    if [ "$update_sel" = u ]; then
         echo "enter the new username"
         printf "username: "
         read -r new_user
@@ -123,7 +124,9 @@ remove_key() {
     echo "are you sure you want to remove this key (y/N): "
     read -r confirm_del
 
-    [ "$(expr "$confirm_del" : "[yY]")" = 1 ] && rm "$vault/$sel_key"
+    [ "$confirm_del" = y ] &&
+        rm "$vault/$sel_key" && echo "key removed"
+
     echo "done"
 }
 
