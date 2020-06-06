@@ -128,8 +128,6 @@ remove_key() {
 
     [ "$confirm_del" = y ] &&
         rm "$vault/$sel_key" && echo "key removed"
-
-    echo "done"
 }
 
 [ "$1" = "add"    ] && add_key "$@" && exit 0
@@ -144,7 +142,8 @@ clipboard=$(set_clipboard)
 [ ! "$clipboard" ] && echo "couldn't detect clipboard" >&2 && exit 1
 
 sel_key=$(select_key)
-[ ! "$sel_key" ] && echo "invalid entry" >&2 && exit 1
+[ ! "$sel_key" ] && exit 0
+# [ ! "$sel_key" ] && echo "invalid entry" >&2 && exit 1
 
 key_text=$(gpg --decrypt "$vault/$sel_key" 2> /dev/null)
 [ ! "$key_text" ] && echo "decrypt failed" >&2 && exit 1
