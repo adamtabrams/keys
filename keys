@@ -2,6 +2,7 @@
 
 xdg_data_home=${XDG_DATA_HOME:-$HOME/.local/share}
 vault="$xdg_data_home/keys/vault"
+selector=${SELECTOR:-fzf --reverse}
 
 [ ! -d "$vault" ] && mkdir -p "$vault"
 
@@ -42,7 +43,7 @@ set_clipboard() {
 }
 
 select_key() {
-    find "$vault" -mindepth 1 -exec basename {} \; | fzf +m --reverse
+    find "$vault" -mindepth 1 -exec basename {} \; | $selector --no-multi
 }
 
 get_password() {

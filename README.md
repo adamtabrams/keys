@@ -8,6 +8,7 @@ for GPG, making it easy to store and access passwords.
 
 Install GPG and fzf.
 * For MacOS: `brew install gpg fzf`
+* If you prefer to use skim, put `export SELECTOR="sk"` in your shell's config file.
 
 Create a GPG key.
 * `gpg --full-generate-key`
